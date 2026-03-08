@@ -6,7 +6,7 @@ from dash import dcc, html, Input, Output, State
 import plotly.graph_objects as go
 import pandas as pd
 
-from pycorn import load
+from pycorn import pc_res3, pc_uni6
 
 app = dash.Dash(__name__)
 server = app.server
@@ -55,7 +55,19 @@ def parse_akta_file(contents, filename):
         tmp.write(decoded)
         tmp_path = tmp.name
 
-    run = load(tmp_path)
+    try:
+        if (tmp_path[-3:]).lower() == "zip":
+            fdata = pc_uni6(tmp_path)
+            run = fdata.load()
+            fdata.xml_parse()
+            fdata.clean_up()
+        if (tmp_path[-3:]).lower() == "res":
+            fdata = pc_res3(tmp_path, reduce = args.reduce, inj_sel=args.inject)
+            run = fdata.load()
+    except:
+        ImportError
+        print("Import Error")
+    
 
     chromatograms = {}
 
