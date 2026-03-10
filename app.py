@@ -21,6 +21,18 @@ app.layout = html.Div(
     },
     children=[
         html.H2("AKTA FPLC Chromatogram Viewer"),
+        html.P(
+            "Open source tool to visualize AKTA chromatogram data from .zip or .res files."
+        ),
+        html.A(
+            "See github repo: https://github.com/gageoleighton/Artiums",
+            href="https://github.com/gageoleighton/Artiums",
+            target="_blank",
+        ),
+        html.Div(
+            style={"flex": "0 0 2%", "maxWidth": "10%", "boxSizing": "border-box"},
+            children=[],
+        ),
         # client-side store for chromatogram data (persists in browser localStorage)
         dcc.Store(id="chrom-store", storage_type="local"),
         dcc.Upload(
@@ -32,57 +44,78 @@ app.layout = html.Div(
                 "lineHeight": "80px",
                 "borderWidth": "2px",
                 "borderStyle": "dashed",
-                "borderRadius": "5px",
+                "borderRadius": "10px",
                 "textAlign": "center",
+                "marginBottom": "5px",
             },
             multiple=False,
         ),
-        html.Div(
-            style={
-                "display": "flex",
-                "gap": "12px",
-                "alignItems": "stretch",
-                "flex": "1 1 auto",
-                "minHeight": 0,
-            },
-            children=[
-                html.Div(
-                    style={
-                        "flex": "0 0 20%",
-                        "maxWidth": "20%",
-                        "boxSizing": "border-box",
-                        "paddingRight": "8px",
-                        "overflowY": "auto",
-                    },
-                    children=[
-                        html.Div(
-                            "Channels",
-                            style={"fontWeight": "600", "marginBottom": "6px"},
-                        ),
-                        dcc.Checklist(
-                            id="channel-select",
-                            options=[],
-                            value=[],
-                            inputStyle={"margin-right": "6px", "margin-left": "10px"},
-                            labelStyle={"display": "block"},
-                        ),
-                    ],
-                ),
-                html.Div(
-                    style={
-                        "flex": "1 1 80%",
-                        "maxWidth": "80%",
-                        "boxSizing": "border-box",
-                        "minHeight": 0,
-                        "display": "flex",
-                    },
-                    children=[
-                        dcc.Graph(
-                            id="chromatogram", style={"height": "100%", "width": "100%"}
-                        )
-                    ],
-                ),
-            ],
+        dcc.Loading(
+            id="loading-area",
+            type="default",
+            children=html.Div(
+                style={
+                    "display": "flex",
+                    "gap": "12px",
+                    "alignItems": "stretch",
+                    "flex": "1 1 auto",
+                    "minHeight": 0,
+                    "flexWrap": "nowrap",
+                },
+                children=[
+                    html.Div(
+                        style={
+                            "flex": "0 0 20%",
+                            "maxWidth": "20%",
+                            "minWidth": "160px",
+                            "boxSizing": "border-box",
+                            "paddingRight": "8px",
+                            "overflowY": "auto",
+                        },
+                        children=[
+                            html.Div(
+                                "Channels",
+                                style={
+                                    "fontWeight": "600",
+                                    "marginBottom": "6px",
+                                    "marginTop": "6px",
+                                },
+                            ),
+                            dcc.Checklist(
+                                id="channel-select",
+                                options=[],
+                                value=[],
+                                inputStyle={
+                                    "margin-right": "6px",
+                                    "margin-left": "10px",
+                                },
+                                labelStyle={"display": "block"},
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        style={
+                            "flex": "1 1 80%",
+                            "maxWidth": "80%",
+                            "minWidth": 0,
+                            "boxSizing": "border-box",
+                            "minHeight": 0,
+                            "display": "flex",
+                            "overflow": "hidden",
+                        },
+                        children=[
+                            dcc.Graph(
+                                id="chromatogram",
+                                style={
+                                    "flex": "1 1 100%",
+                                    "height": "100%",
+                                    "width": "100%",
+                                },
+                            )
+                        ],
+                    ),
+                ],
+            ),
         ),
     ],
 )
@@ -180,6 +213,9 @@ def update_channels(contents, filename):
         name: {"x": df["x"].tolist(), "y": df["y"].tolist()}
         for name, df in chromatograms.items()
     }
+
+    # Remove Run Log
+    options = [opt for opt in options if opt["value"].lower() != "run log"]
 
     # default-select chromatograms whose names start with "UV"
     uv_defaults = [
