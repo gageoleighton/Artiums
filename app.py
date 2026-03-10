@@ -217,49 +217,121 @@ def plot_channel(channels, store_data, filename):
     uv_keys = [k for k in available_keys if k.upper().startswith("UV 1_")]
     last_uv = uv_keys[-1] if uv_keys else None
     for channel in channels:
-        # Prefer server-side data when available (faster, avoids deserialization)
-        if hasattr(app.server, "chrom_data") and channel in getattr(
-            app.server, "chrom_data"
-        ):
-            df = app.server.chrom_data[channel]
-            x = df["x"]
-            y = df["y"]
-        else:
-            # fallback to client-side stored data (from dcc.Store)
-            if not store_data or channel not in store_data:
-                # skip missing channel
-                continue
-            x = store_data[channel]["x"]
-            y = store_data[channel]["y"]
+        if channel != "Fractions":
+            # Prefer server-side data when available (faster, avoids deserialization)
+            if hasattr(app.server, "chrom_data") and channel in getattr(
+                app.server, "chrom_data"
+            ):
+                df = app.server.chrom_data[channel]
+                x = df["x"]
+                y = df["y"]
+            else:
+                # fallback to client-side stored data (from dcc.Store)
+                if not store_data or channel not in store_data:
+                    # skip missing channel
+                    continue
+                x = store_data[channel]["x"]
+                y = store_data[channel]["y"]
 
-        # decide if this is a UV trace (primary y) or non-UV (secondary y)
-        is_uv = channel.upper().startswith("UV")
+            # decide if this is a UV trace (primary y) or non-UV (secondary y)
+            is_uv = channel.upper().startswith("UV")
 
-        # choose color for some UV channels if present
-        color_dic = {
-            "280": "blue",
-            "260": "red",
-            "214": "orange",
-            "320": "purple",
-            "Conc B": "green",
-        }
-        color = None
-        parts = channel.replace(" ", "_").split("_")
-        if len(parts) >= 2 and parts[-1].isdigit():
-            color = color_dic.get(parts[-1])
-        elif channel.upper() == "CONC B":
-            color = color_dic.get("Conc B")
+            # choose color for some UV channels if present
+            color_dic = {
+                "280": "blue",
+                "260": "red",
+                "214": "orange",
+                "320": "purple",
+                "Conc B": "green",
+            }
+            color = None
+            parts = channel.replace(" ", "_").split("_")
+            if len(parts) >= 2 and parts[-1].isdigit():
+                color = color_dic.get(parts[-1])
+            elif channel.upper() == "CONC B":
+                color = color_dic.get("Conc B")
 
-        trace_kwargs = {"x": x, "y": y, "mode": "lines", "name": channel}
-        if color:
-            trace_kwargs["line"] = {"color": color}
+            trace_kwargs = {"x": x, "y": y, "mode": "lines", "name": channel}
+            if color:
+                trace_kwargs["line"] = {"color": color}
 
-        if is_uv:
-            fig.add_trace(go.Scatter(**trace_kwargs))
-        else:
-            # plot on secondary y-axis
-            trace_kwargs["yaxis"] = "y2"
-            fig.add_trace(go.Scatter(**trace_kwargs))
+            if is_uv:
+                fig.add_trace(go.Scatter(**trace_kwargs))
+            else:
+                # plot on secondary y-axis
+                trace_kwargs["yaxis"] = "y2"
+                fig.add_trace(go.Scatter(**trace_kwargs))
+
+    if "Fractions" in channels:
+        # --- Fractions: find fraction-like key and plot vertical red lines at positions ---
+        frac_key = None
+        for k in available_keys:
+            if (
+                "frac" in k.lower()
+                or "fraction" in k.lower()
+                or k.lower().startswith("fractions")
+            ):
+                frac_key = k
+                break
+
+        fractions = []
+        if frac_key:
+            src = None
+            if hasattr(app.server, "chrom_data") and frac_key in getattr(
+                app.server, "chrom_data"
+            ):
+                src = app.server.chrom_data[frac_key]
+            elif store_data and frac_key in store_data:
+                src = store_data[frac_key]
+
+            # src might be a dict with 'data' list of tuples, or a DataFrame-like dict
+            if isinstance(src, dict) and "data" in src:
+                # expect list of (pos, label)
+                for item in src["data"]:
+                    pos = float(item[0])
+                    label = str(item[1])
+                    fractions.append((pos, label))
+            elif isinstance(src, type(pd.DataFrame())):
+                # expect DataFrame with 'x' and 'y' where 'y' is label
+                for pos, label in zip(src["x"], src["y"]):
+                    pos = float(pos)
+                    label = str(label)
+                    fractions.append((pos, label))
+
+        # draw vertical lines for fraction positions and annotate fraction numbers between lines
+        # filter numeric labels (skip 'Waste') and sort by position
+        num_fracs = [(p, l) for p, l in fractions if l and l.isdigit()]
+        num_fracs.sort(key=lambda t: t[0])
+
+        # add vertical lines
+        for pos, label in fractions:
+            fig.add_shape(
+                type="line",
+                x0=pos,
+                x1=pos,
+                y0=0,
+                y1=0.1,
+                xref="x",
+                yref="paper",
+                line={"color": "red", "width": 2},
+                layer="above",
+            )
+
+        # add annotations between consecutive fraction lines (use right label)
+        for i in range(len(num_fracs) - 1):
+            left, label = num_fracs[i]
+            right, _ = num_fracs[i + 1]
+            mid = (left + right) / 2.0
+            fig.add_annotation(
+                x=mid,
+                y=0.03,
+                xref="x",
+                yref="paper",
+                showarrow=False,
+                text=str(label),
+                font={"color": "red", "size": 12},
+                bgcolor="rgba(255,255,255,0.7)",
+            )
 
     fig.update_layout(
         xaxis_title="Volume (mL)",
